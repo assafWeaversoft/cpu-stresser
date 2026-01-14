@@ -248,6 +248,62 @@
         .loading {
             animation: pulse 1.5s ease-in-out infinite;
         }
+
+        .server-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+        }
+
+        .server-info h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.1em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .server-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-label {
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+
+        .info-value {
+            font-size: 1em;
+            color: #333;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .info-value.ip-list {
+            font-size: 0.9em;
+        }
+
+        .ip-tag {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            margin: 2px;
+        }
     </style>
 </head>
 <body>
@@ -259,6 +315,28 @@
 
         <div class="content">
             <div id="message" class="message"></div>
+
+            <div class="server-info">
+                <h3>🖥️ Server Information</h3>
+                <div id="serverInfo" class="server-info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Hostname</div>
+                        <div class="info-value" id="hostname">Loading...</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">IP Addresses</div>
+                        <div class="info-value ip-list" id="ipAddresses">Loading...</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">CPU Cores</div>
+                        <div class="info-value" id="cpuCount">Loading...</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Platform</div>
+                        <div class="info-value" id="platform" style="font-size: 0.85em;">Loading...</div>
+                    </div>
+                </div>
+            </div>
 
             <form id="stressForm">
                 <div class="form-group">
@@ -327,6 +405,39 @@
             setTimeout(() => {
                 messageEl.classList.remove('show');
             }, 5000);
+        }
+
+        // Load server info
+        async function loadServerInfo() {
+            try {
+                const response = await fetch(`${API_BASE}/server-info`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                console.log('Server info data:', data);
+                
+                document.getElementById('hostname').textContent = data.hostname || 'Unknown';
+                
+                const ipEl = document.getElementById('ipAddresses');
+                if (data.ip_addresses && data.ip_addresses.length > 0 && !data.ip_addresses.includes('Not available')) {
+                    ipEl.innerHTML = data.ip_addresses.map(ip => 
+                        `<span class="ip-tag">${ip}</span>`
+                    ).join('');
+                } else {
+                    ipEl.textContent = 'Not available';
+                }
+                
+                document.getElementById('cpuCount').textContent = `${data.cpu_count || 'Unknown'} cores`;
+                document.getElementById('platform').textContent = data.platform || data.os?.system || 'Unknown';
+            } catch (error) {
+                console.error('Failed to load server info:', error);
+                document.getElementById('hostname').textContent = 'Error loading';
+                document.getElementById('ipAddresses').textContent = 'Error loading';
+                document.getElementById('cpuCount').textContent = 'Error loading';
+                document.getElementById('platform').textContent = 'Error loading';
+            }
         }
 
         // Check health
@@ -450,12 +561,14 @@
 
         // Refresh button
         document.getElementById('refreshBtn').addEventListener('click', () => {
+            loadServerInfo();
             checkHealth();
             loadStresses();
             showMessage('Status refreshed', 'info');
         });
 
         // Initial load
+        loadServerInfo();
         checkHealth();
         loadStresses();
 

@@ -6,6 +6,8 @@ from typing import Optional
 import subprocess
 import signal
 import os
+import socket
+import platform
 from datetime import datetime
 import logging
 
@@ -43,6 +45,98 @@ async def root():
 async def health():
     """Health check endpoint for upstream health checks"""
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+
+
+@app.get("/server-info")
+async def server_info():
+    """Get server information"""
+    hostname = socket.gethostname()
+    
+    # Get IP addresses - try multiple methods
+    ip_addresses = []
+    
+    # Method 1: Get local IP by connecting to external address
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        if local_ip and not local_ip.startswith('127.'):
+            ip_addresses.append(local_ip)
+    except Exception as e:
+        logger.debug(f"Socket connect method failed: {e}")
+    
+    # Method 2: Parse network interfaces from /proc/net/route (Linux)
+    try:
+        with open('/proc/net/route', 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 2 and parts[1] != '00000000':  # Not default route
+                    interface = parts[0]
+                    # Get IP for this interface
+                    try:
+                        result = subprocess.run(
+                            ['hostname', '-I'],
+                            capture_output=True,
+                            text=True,
+                            timeout=2
+                        )
+                        if result.returncode == 0:
+                            ips = result.stdout.strip().split()
+                            for ip in ips:
+                                if ip and not ip.startswith('127.') and ip not in ip_addresses:
+                                    ip_addresses.append(ip)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    
+    # Method 3: Use hostname -I command (Linux)
+    try:
+        result = subprocess.run(
+            ['hostname', '-I'],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if result.returncode == 0:
+            ips = result.stdout.strip().split()
+            for ip in ips:
+                if ip and not ip.startswith('127.') and ip not in ip_addresses:
+                    ip_addresses.append(ip)
+    except Exception as e:
+        logger.debug(f"hostname -I failed: {e}")
+    
+    # Method 4: Try to get IP from hostname
+    try:
+        host_ip = socket.gethostbyname(hostname)
+        if host_ip and host_ip not in ip_addresses and not host_ip.startswith('127.'):
+            ip_addresses.append(host_ip)
+    except Exception as e:
+        logger.debug(f"Hostname resolution failed: {e}")
+    
+    # Get CPU count
+    cpu_count = os.cpu_count() or 1
+    
+    # Get OS info
+    os_info = {
+        "system": platform.system(),
+        "release": platform.release(),
+        "machine": platform.machine(),
+        "processor": platform.processor()
+    }
+    
+    result = {
+        "hostname": hostname,
+        "ip_addresses": ip_addresses if ip_addresses else ["Not available"],
+        "cpu_count": cpu_count,
+        "os": os_info,
+        "platform": platform.platform()
+    }
+    
+    logger.info(f"Server info returned: hostname={hostname}, cpu={cpu_count}, ips={ip_addresses}")
+    return result
 
 
 @app.post("/stress", response_model=StressResponse)
