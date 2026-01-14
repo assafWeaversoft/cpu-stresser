@@ -1,0 +1,18 @@
+[Unit]
+Description=CPU Stresser FastAPI Service
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/cpu-stresser
+Environment="PATH=/home/ec2-user/cpu-stresser/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/ec2-user/cpu-stresser/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
